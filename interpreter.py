@@ -323,7 +323,6 @@ class DenoObject(InterpreterObject):
         except json.decoder.JSONDecodeError as er:
             raise InterpreterException(result)
 
-    def __getattribute__(self, name: str):
     def __call__(self, *args: Any, **kwargs: Dict) -> 'DenoObject':
         '''
         This method lets python object perform like Deno function.
