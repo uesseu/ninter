@@ -134,17 +134,17 @@ class RObject(InterpreterObject):
         >>> r['r_vector_int'] = [9, 4, 5, 1]
         >>> # Then, run the function.
         >>> result = t_test(r['r_vector_int'], [1, 2, 4, 5], options={'paired': True}) 
-        >>> print(0.5285171 < result['p.value'].get() < 0.5285173)
+        >>> print(0.5285171 < result['p.value'].to_python() < 0.5285173)
         True
         '''
         code_args = ",".join(
             arg.code if isinstance(arg, RObject)
-            else RObject.convert_to_interpreter(arg)
+            else RObject._convert_to_interpreter(arg)
             for arg in args)
         code_kwargs = ",".join([
             f'{key}={options[key].code}'
             if isinstance(options[key], RObject)
-            else f'{key}={RObject.convert_to_interpreter(options[key])}'
+            else f'{key}={RObject._convert_to_interpreter(options[key])}'
             for key in options])
         if options:
             code = f'{self.code}({code_args}, {code_kwargs})'
@@ -239,7 +239,7 @@ class RObject(InterpreterObject):
             df = pd.read_csv(data)
         return df
 
-    def get(self) -> Any:
+    def to_python(self) -> Any:
         '''
         This method just takes some R object from world of R.
         It does not record any objects in python world.
@@ -276,9 +276,9 @@ class RObject(InterpreterObject):
                 return self.inter.get(self.name).strip()
 
     @classmethod
-    def convert_to_interpreter(cls, obj: Any) -> str:
+    def _convert_to_interpreter(cls, obj: Any) -> str:
         if isinstance(obj, InterpreterObject):
-            obj = obj.get()
+            obj = obj.to_python()
         if isinstance(obj, str):
             return f'"{obj}"'
         elif isinstance(obj, bool):
@@ -304,15 +304,15 @@ class DenoObject(InterpreterObject):
         self.inter = interpreter
 
     @classmethod
-    def convert_to_interpreter(cls, obj: Any) -> str:
+    def _convert_to_interpreter(cls, obj: Any) -> str:
         if isinstance(obj, InterpreterObject):
-            obj = obj.get()
+            obj = obj.to_python()
         return json.dumps(obj)
 
     def __str__(self) -> str:
         return f'DenoObject[{self.name}: {self.code}]'
 
-    def get(self) -> Any:
+    def to_python(self) -> Any:
         key = self.inter.send(
             f'try{{console.log(JSON.stringify({self.name}))}}catch(e){{console.log("JS error:", e)}}'
         )
@@ -323,6 +323,7 @@ class DenoObject(InterpreterObject):
         except json.decoder.JSONDecodeError as er:
             raise InterpreterException(result)
 
+    def __getattribute__(self, name: str):
     def __call__(self, *args: Any, **kwargs: Dict) -> 'DenoObject':
         '''
         This method lets python object perform like Deno function.
@@ -336,12 +337,12 @@ class DenoObject(InterpreterObject):
         '''
         code_args = ",".join(
             arg.code if isinstance(arg, DenoObject)
-            else DenoObject.convert_to_interpreter(arg)
+            else DenoObject._convert_to_interpreter(arg)
             for arg in args)
         code_kwargs = ",".join([
             f'{key}={cast(DenoObject, kwargs[key]).code}'
             if isinstance(kwargs[key], DenoObject)
-            else f'{key}={DenoObject.convert_to_interpreter(kwargs[key])}'
+            else f'{key}={DenoObject._convert_to_interpreter(kwargs[key])}'
             for key in kwargs])
         if kwargs:
             code = f'({self.code})({code_args}, {code_kwargs})'

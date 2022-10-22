@@ -230,11 +230,11 @@ class Interpreter:
         elif isinstance(value, InterpreterObject):
             self.get(self.command.make_send_command(
                 name,
-                self.ObjectClass.convert_to_interpreter(value.get())))
+                self.ObjectClass._convert_to_interpreter(value.to_python())))
         else:
             self.get(self.command.make_send_command(
                 name,
-                self.ObjectClass.convert_to_interpreter(value)))
+                self.ObjectClass._convert_to_interpreter(value)))
 
     def __getitem__(self, name: str) -> 'InterpreterObject':
         '''
@@ -277,7 +277,7 @@ class InterpreterObject:
 
     @classmethod
     @abstractmethod
-    def convert_to_interpreter(cls, obj: Any) -> str:
+    def _convert_to_interpreter(cls, obj: Any) -> str:
         '''
         Class method to make some python object
         to be a string to send to interpreter.
@@ -285,7 +285,7 @@ class InterpreterObject:
         return ''
 
     @abstractmethod
-    def get(self) -> Any:
+    def to_python(self) -> Any:
         '''
         This method takes some object from other interpreter.
         It does not record any objects in python world.
@@ -293,7 +293,7 @@ class InterpreterObject:
         pass
 
     @abstractmethod
-    def delete(self, name: str) -> Any:
+    def __del__(self) -> Any:
         '''
         Delete the object.
         If the object has no deleting function, do nothing.
