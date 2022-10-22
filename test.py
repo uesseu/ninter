@@ -1,8 +1,12 @@
+"""
+Test scripts of this package.
+This is... just my hobby and not good test script.
+"""
 from interpreter import (RCommand, RObject, DenoObject,
                          DenoCommand, Interpreter, InterpreterException,
                          )
 import pandas as pd
-from __init__ import start_deno, start_r
+from __init__ import Deno, R
 
 
 def r_test() -> None:
@@ -91,7 +95,7 @@ def deno_test() -> None:
 
 
 def inter() -> None:
-    r, deno = start_r(), start_deno()
+    r, deno = R(), Deno()
     r['hoge'] = 5
     deno.let('hoge', 'null')
     deno['hoge'] = r['hoge']
@@ -110,7 +114,7 @@ def main() -> None:
     error_test()
     deno_test()
     inter()
-    deno = start_deno()
+    deno = Deno()
     print(deno['4'].get())
     print(deno['r=>5'](4).get())
     print(deno['function(){return 7}'](5).get())

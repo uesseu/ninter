@@ -1,3 +1,20 @@
+"""
+Concrete classes to use other interpreter.
+
+The way to build a interface is like below.
+- Inherit Command class and override them.
+    + is_not_input_head
+    + make_key_pair
+    + make_code
+    + is_not_input_head
+- Inherit InterpreterObject class and override ABCmethods.
+- Inherit Interpreter class which catches arguments like below.
+    + Instance of class inherited from Command object.
+    + Class inherited from InterpreterObject class.
+
+Not very easy.
+It may be big class to fit interpreter perfectly.
+"""
 from typing import Any, Optional, List, Union, Tuple, Dict, cast
 from os import environ
 from subprocess import Popen, PIPE, STDOUT
