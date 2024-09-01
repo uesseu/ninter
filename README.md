@@ -3,7 +3,7 @@ Ninter is a python package to use interpreter.
 This is my hobby project and may be buggy.  
 Currently, it can use R and Deno.  
 Ninter has a ability to manipulate other interpreters  
-like python code by 'get' method.  
+like python code by 'to_python' method.  
 For example...  
 
 ```python
@@ -13,7 +13,7 @@ deno = start_deno()
 
 array = deno['Array']  # Deno object
 x = array(*range(5))  # Deno object
-y = array(3, 3, 4, 5, 6).get()  # Python object got from Deno
+y = array(3, 3, 4, 5, 6).to_python()  # Python object got from Deno
 t_test = r['t.test']  # R function was imported
 
 # And then... Deno and Python object was processed by R function!
@@ -32,6 +32,9 @@ from ninter import start_r
 r = start_r()
 r['hoge'] = 3
 ```
+
+In case of Deno, use start_deno.
+
 ## Set item
 Instances can get something by braces of 'set item'.
 
@@ -49,7 +52,7 @@ The item in the brace must be a string.
 from ninter import start_r
 r = start_r()
 result = r['3']
-print(result.get())
+print(result.to_python())
 ```
 
 You can get function by such braces, too.
@@ -83,7 +86,7 @@ In this case, class is defined in deno and it worked well.
 If the interpreter supports higher-order function, it can run the function.
 
 # Objects
-You can manipulate object in Deno and item in R like python dict.
+You can manipulate objects in Deno and items in R like python dict.
 In case of Deno, it converts '\[\]' to '.'.
 In case of R, it converts '\[\]' to '$'.
 

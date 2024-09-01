@@ -5,6 +5,7 @@ from typing import Any, Optional, List, Union, Tuple, Callable, cast, Dict
 from abc import abstractmethod
 from subprocess import Popen, PIPE, STDOUT
 import time
+import uuid
 from collections import deque
 debug = False
 
@@ -22,6 +23,9 @@ class Command:
 
     def __init__(self) -> None:
         self.inter: Popen
+
+    def close(self) -> None:
+        self.inter.terminate()
 
     def write(self, text: str) -> None:
         '''
@@ -116,7 +120,7 @@ class Command:
         pass
 
     @abstractmethod
-    def make_let(self, name: str, value: str) -> str:
+    def make_let_command(self, name: str, value: str) -> str:
         '''
         Make const in interpreter.
         If there is no let in the interpreter, it does not anything.
@@ -124,7 +128,7 @@ class Command:
         return ''
 
     @abstractmethod
-    def make_const(self, name: str, value: str) -> str:
+    def make_const_command(self, name: str, value: str) -> str:
         '''
         Make const in interpreter.
         If there is no const in the interpreter,
@@ -138,12 +142,14 @@ class InterpreterException(Exception):
     Exception class which should be raised
     when interpreter put a exception.
     '''
+
     def __init__(self, *args: str) -> None:
         self.args = args
 
     def __str__(self) -> str:
         ex_str = '\n    '.join(''.join(self.args).split('\n'))
         return f'\n\nInterpreter-Exception: {ex_str}'
+
 
 class Interpreter:
     '''
@@ -221,20 +227,25 @@ class Interpreter:
         result = ''.join(strings)
         return key, result
 
+    def _setitem(self, name: str, value, make_command: Callable) -> None:
+        if debug:
+            print('code:', make_command(name, value))
+        if isinstance(value, self.ObjectClass):
+            self.get(make_command(name, value.name))
+        elif isinstance(value, InterpreterObject):
+            self.get(make_command(
+                name,
+                self.ObjectClass._convert_to_interpreter(value.to_python())))
+        else:
+            self.get(make_command(
+                name,
+                self.ObjectClass._convert_to_interpreter(value)))
+
     def __setitem__(self, name: str, value: Any) -> None:
         '''
         Set object to interpreter.
         '''
-        if isinstance(value, self.ObjectClass):
-            self.get(self.command.make_send_command(name, value.name))
-        elif isinstance(value, InterpreterObject):
-            self.get(self.command.make_send_command(
-                name,
-                self.ObjectClass._convert_to_interpreter(value.to_python())))
-        else:
-            self.get(self.command.make_send_command(
-                name,
-                self.ObjectClass._convert_to_interpreter(value)))
+        self._setitem(name, value, self.command.make_send_command)
 
     def __getitem__(self, name: str) -> 'InterpreterObject':
         '''
@@ -249,18 +260,22 @@ class Interpreter:
         '''
         return self.command.make_tmp_variable(time_stamp)
 
-    def let(self, name: str, value: str) -> None:
-        key = self.send(self.command.make_let(name, value))
-        self.flush()
-        self.receive_by_key(key)
+    def let(self, name: str, value: Any) -> None:
+        if debug:
+            print(self.command.make_let_command(name, value))
+        self._setitem(name, value, self.command.make_let_command)
 
     def const(self, name: str, value: str) -> None:
-        key = self.send(self.command.make_const(name, value))
-        self.flush()
-        self.receive_by_key(key)
+        if debug:
+            print(self.command.make_let_command(name, value))
+        self._setitem(name, value, self.command.make_const_command)
 
-    def __del__(self) -> None:
-        self.command.inter.kill()
+    def close(self) -> None:
+        self.send(';' + self.command.close() + ';\n')
+        self.flush()
+        self.command.inter.wait()
+        self.command.close()
+
 
 class InterpreterObject:
     '''
@@ -274,6 +289,9 @@ class InterpreterObject:
         self.inter = interpreter
         self.code = code
         self.value = value
+
+    def __getattr__(self, name: str) -> 'InterpreterObject':
+        return self[name]
 
     @classmethod
     @abstractmethod
@@ -289,6 +307,9 @@ class InterpreterObject:
         '''
         This method takes some object from other interpreter.
         It does not record any objects in python world.
+
+        In rare case, you may use 'to_python' method or member.
+        If you want to use such a thing, you can use [].
         '''
         pass
 
@@ -307,3 +328,129 @@ class InterpreterObject:
         '''
         return True
 
+    def _operator(self, obj: Any, operator: str) -> 'InterpreterObject':
+        if not isinstance(obj, InterpreterObject):
+            obj = self.__class__._convert_to_interpreter(obj)
+        code = f'({self._code} {operator} {obj})'
+        time_stamp = str(uuid.uuid1()).replace('-', '_')
+        tmp_name = self._inter.make_tmp_variable(time_stamp)
+        self._inter.send(f'try{{{tmp_name} = {code};}}catch(er){{{tmp_name}=er}}')
+        self._inter.flush()
+        return self.__class__(name=code, code=tmp_name, interpreter=self._inter)
+
+    def __iadd__(self, obj: Any) -> 'InterpreterObject':
+        return self._operator(obj, '+')
+
+    def __isub__(self, obj: Any) -> 'InterpreterObject':
+        return self._operator(obj, '-')
+
+    def __imul__(self, obj: Any) -> 'InterpreterObject':
+        return self._operator(obj, '*')
+
+    def __add__(self, obj: Any) -> 'InterpreterObject':
+        return self._operator(obj, '+')
+
+    def __sub__(self, obj: Any) -> 'InterpreterObject':
+        return self._operator(obj, '-')
+
+    def __mul__(self, obj: Any) -> 'InterpreterObject':
+        return self._operator(obj, '*')
+
+    def __div__(self, obj: Any) -> 'InterpreterObject':
+        return self._operator(obj, '/')
+
+    def __idiv__(self, obj: Any) -> 'InterpreterObject':
+        return self._operator(obj, '/')
+
+    def __mod__(self, obj: Any) -> 'InterpreterObject':
+        return self._operator(obj, '%')
+
+    def __imod__(self, obj: Any) -> 'InterpreterObject':
+        return self._operator(obj, '%')
+
+    def __or__(self, obj: Any) -> 'InterpreterObject':
+        return self._operator(obj, '||')
+
+    def __and__(self, obj: Any) -> 'InterpreterObject':
+        return self._operator(obj, '&&')
+
+    def __lt__(self, obj: Any) -> 'InterpreterObject':
+        return self._operator(obj, '<')
+
+    def __le__(self, obj: Any) -> 'InterpreterObject':
+        return self._operator(obj, '<=')
+
+    def __gt__(self, obj: Any) -> 'InterpreterObject':
+        return self._operator(obj, '>')
+
+    def __ge__(self, obj: Any) -> 'InterpreterObject':
+        return self._operator(obj, '>=')
+
+    def __eq__(self, obj: Any) -> 'InterpreterObject':
+        return self._operator(obj, '===')
+
+    def __ne__(self, obj: Any) -> 'InterpreterObject':
+        return self._operator(obj, '!==')
+
+class Bridge:
+    '''
+    Just a wrapper object to use Interpreter object
+    like python object.
+    '''
+
+    def __init__(self, inter: Interpreter):
+        object.__setattr__(self, '_inter', inter)
+
+    def __getattr__(self, key: str) -> Any:
+        return object.__getattribute__(self, '_inter')[key]
+
+    def __setattr__(self, key: str, obj: Any) -> None:
+        self._inter[key] = obj
+
+    def __getitem__(self, key: str) -> Any:
+        return self._inter[key]
+
+    def __setitem__(self, key: str, obj: Any) -> None:
+        self._inter[key] = obj
+
+    def close(self):
+        object.__getattribute__(self, '_inter').close()
+
+
+class Let:
+    '''
+    A object to send variable to other interpreter
+    with declaration statement like 'let'.
+
+    It works with any interpreter.
+    It should get Bridge object at first.
+
+    >>> from ninter import R, Deno, Bridge, Let
+    >>> r = Bridge(R)
+    >>> Let(r).my_object = 'hoge'
+    >>> print(r.my_object)
+    '''
+
+    def __init__(self, obj: Bridge) -> None:
+        self._inter: Interpreter
+        object.__setattr__(self, '_inter', obj._inter)
+
+    def __setattr__(self, key: str, obj: Any) -> None:
+        self._inter.let(key, obj)
+
+
+class Const:
+    '''
+    A object to send variable to other interpreter
+    with declaration statement like 'const'.
+
+    It works with any interpreter.
+    It should get Bridge object at first.
+    '''
+
+    def __init__(self, obj: Bridge) -> None:
+        self._inter: Interpreter
+        object.__setattr__(self, '_inter', obj._inter)
+
+    def __setattr__(self, key: str, obj: Any) -> None:
+        self._inter.const(key, obj)
